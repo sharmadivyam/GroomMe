@@ -1,0 +1,16 @@
+{
+  "first_name": "Divyam",
+  "last_name": "Sharma",
+  "email": "divyam@example.com",
+  "password": "securepass",
+  "age": 21,
+  "gender": "male"
+}
+
+{
+  "email": "divyam@example.com",
+  "password": "securepass"
+}
+
+
+{"otp":"123456"}
