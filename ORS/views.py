@@ -7,7 +7,9 @@ from django.core.mail import send_mail
 from django.shortcuts import render, redirect
 from .utils import generate_otp
 from .serializers import UserSerializer
-from .models import User
+from django.shortcuts import get_object_or_404
+from .models import Preference, User
+from .serializers import PreferenceSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
 
 class Signup_SendOTPView(APIView):
@@ -91,3 +93,34 @@ class LoginView(APIView):
 
         print("Serializer Errors:", serializer.errors)
         return Response(serializer.errors, status=status.HTTP_401_UNAUTHORIZED)
+
+
+class PreferenceSaveView(APIView):
+    def post(self, request, user_id):
+        user = get_object_or_404(User, pk=user_id)
+        preferences_data = request.data  # list of preferences
+
+        for item in preferences_data:
+            serializer = PreferenceSerializer(data=item)
+            if serializer.is_valid():
+                pref_name = serializer.validated_data['preference_name']
+                new_values = serializer.validated_data['preference_value']
+
+                # Tries to get existing Preference (we'll merge if it exists)
+                try:
+                    preference = Preference.objects.get(user=user, preference_name=pref_name)
+                    existing_values = preference.preference_value or []
+                    merged_values = list(set(existing_values + new_values))
+                except Preference.DoesNotExist:
+                    merged_values = new_values
+
+                # Now update or create using merged values
+                Preference.objects.update_or_create(
+                    user=user,
+                    preference_name=pref_name,
+                    defaults={'preference_value': merged_values}
+                )
+            else:
+                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response({"message": "Preferences saved or updated successfully."}, status=status.HTTP_201_CREATED)

@@ -1,4 +1,6 @@
 from django.db import models
+from django.contrib.postgres.fields import ArrayField
+from django.conf import settings
 
 class User(models.Model):
     user_id = models.AutoField(primary_key=True)
@@ -14,4 +16,19 @@ class User(models.Model):
         return f"{self.first_name} {self.last_name}"
 
 
-# Create your models here.
+class Preference(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    preference_name = models.CharField(max_length=100)  # e.g., "style", "color_palette", etc.
+    preference_value = ArrayField(
+        base_field=models.CharField(max_length=100),
+        default=list,
+        blank=False,
+        help_text="List of selected values for this preference (e.g., ['blue', 'green'])"
+    )
+
+    class Meta:
+        unique_together = ('user', 'preference_name')  # One entry per user per category
+
+    def __str__(self):
+        return f"{self.user.username} - {self.preference_name}: {self.preference_value}"
+

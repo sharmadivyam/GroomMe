@@ -8,7 +8,7 @@ class CustomMiddleware :
         self.authenticator = JWTAuthentication()
 
     def __call__(self, request ):
-        if request.path in ['/login/', '/signup/','/signup/verify-otp/']:
+        if request.path in ['/login/', '/signup/','/signup/verify-otp/','/admin/']:
             return self.get_response(request)
         try :
             userauth_tuple = self.authenticator.authenticate(request)

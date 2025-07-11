@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import User
+from .models import User ,Preference
 from django.contrib.auth.hashers import make_password, check_password
 
 
@@ -41,3 +41,9 @@ class UserSerializer(serializers.ModelSerializer):
             age=validated_data.get("age"),    
             gender=validated_data.get("gender")
         )
+    
+
+class PreferenceSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Preference
+        fields = ['preference_name', 'preference_value']
