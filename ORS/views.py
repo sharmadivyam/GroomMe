@@ -6,7 +6,7 @@ from django.contrib.auth.hashers import check_password
 from django.core.mail import send_mail
 from django.shortcuts import render, redirect
 from .utils import generate_otp
-from .serializers import UserSerializer
+from .serializers import SignupSerializer, LoginSerializer
 from django.shortcuts import get_object_or_404
 from .models import Preference, User
 from .serializers import PreferenceSerializer
@@ -52,7 +52,7 @@ class Signup_VerifyOTP(APIView):
             return Response({"error": "Invalid OTP"}, status=status.HTTP_400_BAD_REQUEST)
 
         # OTP verified → create user using stored signup data
-        serializer = UserSerializer(data=signup_data, context={"mode": "signup"})
+        serializer = Signup_SendOTPView(data=signup_data)
         if serializer.is_valid():
             serializer.save()
             request.session.flush()  # Clear OTP and signup data
@@ -63,7 +63,7 @@ class Signup_VerifyOTP(APIView):
 class LoginView(APIView):
     def post(self, request):
         # Pass login mode to serializer
-        serializer = UserSerializer(data=request.data, context={"mode": "login"})
+        serializer = LoginSerializer(data=request.data)
 
         if serializer.is_valid():
             user = serializer.validated_data['user']
