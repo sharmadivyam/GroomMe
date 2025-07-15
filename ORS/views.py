@@ -8,9 +8,24 @@ from django.shortcuts import render, redirect
 from .utils import generate_otp
 from .serializers import SignupSerializer, LoginSerializer
 from django.shortcuts import get_object_or_404
-from .models import Preference, User
-from .serializers import PreferenceSerializer
+from .models import Preference, User , EssentialItem , WardrobeItem
+from .serializers import PreferenceSerializer , EssentialItemSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
+import google.generativeai as genai
+
+genai.configure(api_key='AIzaSyBgJb17Jz6PMIxLk08Qlg49M9jRi6q5eBA')
+model = genai.GenerativeModel(model_name ='models/gemini-1.5-flash')
+
+class GeminiSuggestOutfit(APIView):
+    def post(self, request):
+        prompt = request.data.get('prompt')
+        if not prompt:
+            return Response({'error': 'Prompt is required'}, status=400)
+        try:
+            response = model.generate_content(prompt)
+            return Response({'response': response.text}, status=200)
+        except Exception as e:
+            return Response({'error': str(e)}, status=500)
 
 class Signup_SendOTPView(APIView):
 
@@ -124,3 +139,46 @@ class PreferenceSaveView(APIView):
                 return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         return Response({"message": "Preferences saved or updated successfully."}, status=status.HTTP_201_CREATED)
+
+
+class EssentialItemsListView(APIView):
+    def get(self, request):
+        essentials = EssentialItem.objects.all()
+        serializer = EssentialItemSerializer(essentials, many=True)
+        return Response(serializer.data)
+
+
+class AddEssentialToWardrobeView(APIView):
+
+    def post(self, request):
+        essential_id = request.data.get("essential_id")
+        user = request.user
+
+        try:
+            essential = EssentialItem.objects.get(id=essential_id)
+        except EssentialItem.DoesNotExist:
+            return Response({"error": "Essential not found."}, status=404)
+
+        if WardrobeItem.objects.filter(user=user, essential_reference=essential).exists():
+            return Response({"message": "Already added."}, status=200)
+
+        WardrobeItem.objects.create(
+            user=user,
+            name=essential.name,
+            category=essential.category,
+            color=essential.color,
+            material=essential.material,
+            size=essential.size,
+            brand=essential.brand,
+            description=essential.description,
+            image=essential.image,
+            season_suitability=essential.season_suitability,
+            occasion_suitability=essential.occasion_suitability,
+            style_tags=essential.style_tags,
+            pattern=essential.pattern,
+            fabric_density=essential.fabric_density,
+            is_basic_essential=True,
+            essential_reference=essential
+        )
+
+        return Response({"message": "Added to wardrobe!"}, status=201)

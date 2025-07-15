@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import User ,Preference
+from .models import User ,Preference , EssentialItem
 from django.contrib.auth import authenticate
 
 class SignupSerializer(serializers.ModelSerializer):
@@ -35,3 +35,9 @@ class PreferenceSerializer(serializers.ModelSerializer):
     class Meta:
         model = Preference
         fields = ['preference_name', 'preference_value']
+
+
+class EssentialItemSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = EssentialItem
+        fields = '__all__'

@@ -71,3 +71,101 @@ class Preference(models.Model):
         return f"{self.user.username} - {self.preference_name}: {self.preference_value}"
 
 
+class WardrobeItem(models.Model):
+    CATEGORY_CHOICES = [
+    ('tops', 'Tops'),
+    ('bottoms', 'Bottoms'),
+    ('outerwear', 'Outerwear'),
+    ('footwear', 'Footwear'),
+    ('accessories', 'Accessories'),
+    ('onepiece', 'Dresses/Jumpsuits'),
+    ('bags', 'Bags/Backpacks'),
+    ('sets', 'Co-ords/Suits/Sets'),  
+    ]
+
+
+    FABRIC_DENSITY_CHOICES = [
+        ('lightweight', 'Lightweight'),
+        ('medium', 'Medium'),
+        ('heavy', 'Heavy'),
+    ]
+
+    PATTERN_CHOICES = [
+        ('solid', 'Solid'),
+        ('striped', 'Striped'),
+        ('floral', 'Floral'),
+        ('plaid', 'Plaid'),
+        ('other', 'Other'),
+    ]
+
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    name = models.CharField(max_length=100)
+    category = models.CharField(max_length=50, choices=CATEGORY_CHOICES)
+    color = models.CharField(max_length=50, blank=True, null=True)
+    material = models.CharField(max_length=100, blank=True, null=True)
+    size = models.CharField(max_length=20, blank=True, null=True)
+    brand = models.CharField(max_length=100, blank=True, null=True)
+    description = models.TextField(blank=True, null=True)
+    image = models.ImageField(upload_to='wardrobe_images/', blank=True, null=True)
+    added_at = models.DateTimeField(auto_now_add=True)
+
+    is_basic_essential = models.BooleanField(default=False)
+    essential_reference = models.ForeignKey(
+        'EssentialItem', null=True, blank=True,
+        on_delete=models.SET_NULL
+    )
+    
+    season_suitability = ArrayField(
+        base_field=models.CharField(max_length=50),
+        blank=True,
+        default=list,
+        help_text="e.g., ['Summer', 'Spring']"
+    )
+
+    occasion_suitability = ArrayField(
+        base_field=models.CharField(max_length=50),
+        blank=True,
+        default=list,
+        help_text="e.g., ['Casual', 'Work']"
+    )
+
+    style_tags = ArrayField(
+        base_field=models.CharField(max_length=50),
+        blank=True,
+        default=list,
+        help_text="e.g., ['Bohemian', 'Minimalist']"
+    )
+
+    pattern = models.CharField(max_length=20, choices=PATTERN_CHOICES, blank=True, null=True)
+    fabric_density = models.CharField(max_length=20, choices=FABRIC_DENSITY_CHOICES, blank=True, null=True)
+    last_worn_date = models.DateTimeField(blank=True, null=True)
+
+    def __str__(self):
+        return f"{self.name} - {self.user.email}"
+
+
+class EssentialItem(models.Model):
+    name = models.CharField(max_length=100, unique=True)
+
+    parent = models.ForeignKey(
+        'self',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='variants'
+    )
+    category = models.CharField(max_length=50, choices=WardrobeItem.CATEGORY_CHOICES)
+    color = models.CharField(max_length=50, blank=True, null=True)
+    material = models.CharField(max_length=100, blank=True, null=True)
+    size = models.CharField(max_length=20, blank=True, null=True)
+    brand = models.CharField(max_length=100, blank=True, null=True)
+    description = models.TextField(blank=True, null=True)
+    image = models.ImageField(upload_to='essentials/', blank=True, null=True)
+    season_suitability = ArrayField(models.CharField(max_length=50), blank=True, default=list)
+    occasion_suitability = ArrayField(models.CharField(max_length=50), blank=True, default=list)
+    style_tags = ArrayField(models.CharField(max_length=50), blank=True, default=list)
+    pattern = models.CharField(max_length=20, choices=WardrobeItem.PATTERN_CHOICES, blank=True, null=True)
+    fabric_density = models.CharField(max_length=20, choices=WardrobeItem.FABRIC_DENSITY_CHOICES, blank=True, null=True)
+
+    def __str__(self):
+        return self.name
