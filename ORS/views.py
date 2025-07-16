@@ -9,7 +9,7 @@ from .utils import generate_otp
 from .serializers import SignupSerializer, LoginSerializer
 from django.shortcuts import get_object_or_404
 from .models import Preference, User , EssentialItem , WardrobeItem
-from .serializers import PreferenceSerializer , EssentialItemSerializer
+from .serializers import PreferenceSerializer , EssentialItemSerializer, WardrobeItemSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
 import google.generativeai as genai
 
@@ -51,7 +51,6 @@ class Signup_SendOTPView(APIView):
 
         return Response({"message": "OTP sent to your email"}, status=status.HTTP_200_OK)
     
-
 class Signup_VerifyOTP(APIView):
 
     def post(self, request):
@@ -109,7 +108,6 @@ class LoginView(APIView):
         print("Serializer Errors:", serializer.errors)
         return Response(serializer.errors, status=status.HTTP_401_UNAUTHORIZED)
 
-
 class PreferenceSaveView(APIView):
     def post(self, request, user_id):
         user = get_object_or_404(User, pk=user_id)
@@ -140,13 +138,11 @@ class PreferenceSaveView(APIView):
 
         return Response({"message": "Preferences saved or updated successfully."}, status=status.HTTP_201_CREATED)
 
-
 class EssentialItemsListView(APIView):
     def get(self, request):
         essentials = EssentialItem.objects.all()
         serializer = EssentialItemSerializer(essentials, many=True)
         return Response(serializer.data)
-
 
 class AddEssentialToWardrobeView(APIView):
 
@@ -182,3 +178,12 @@ class AddEssentialToWardrobeView(APIView):
         )
 
         return Response({"message": "Added to wardrobe!"}, status=201)
+    
+class AddWardrobeItemView(APIView):
+
+    def post(self, request):
+        serializer = WardrobeItemSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save(user=request.user)
+            return Response({"message": "Wardrobe item added!", "item": serializer.data}, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

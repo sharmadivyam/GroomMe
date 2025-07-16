@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import User ,Preference , EssentialItem
+from .models import User ,Preference , EssentialItem , WardrobeItem
 from django.contrib.auth import authenticate
 
 class SignupSerializer(serializers.ModelSerializer):
@@ -41,3 +41,12 @@ class EssentialItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = EssentialItem
         fields = '__all__'
+
+class WardrobeItemSerializer(serializers.ModelSerializer):
+    class Meta:
+        model= WardrobeItem
+        fields = ['id', 'user', 'name', 'category', 'color', 'material', 'size',
+            'brand', 'description', 'image', 'season_suitability',
+            'occasion_suitability', 'style_tags', 'pattern', 'fabric_density',
+            'last_worn_date']
+        read_only_fields = ['user'] 
