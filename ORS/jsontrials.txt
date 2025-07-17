@@ -14,3 +14,14 @@
 
 
 {"otp":"123456"}
+
+
+[
+{
+"preference_name":"style",
+"preference_value":["old money"]
+}
+]
+
+
+AIzaSyBgJb17Jz6PMIxLk08Qlg49M9jRi6q5eBA

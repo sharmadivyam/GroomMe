@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import User ,Preference , EssentialItem , WardrobeItem
+from .models import User ,Preference , EssentialItem , WardrobeItem , OutfitRecommendation
 from django.contrib.auth import authenticate
 
 class SignupSerializer(serializers.ModelSerializer):
@@ -50,3 +50,16 @@ class WardrobeItemSerializer(serializers.ModelSerializer):
             'occasion_suitability', 'style_tags', 'pattern', 'fabric_density',
             'last_worn_date']
         read_only_fields = ['user'] 
+
+
+class OutfitRequestSerializer(serializers.Serializer):
+    
+    occasion = serializers.CharField()
+    preferred_styles = serializers.ListField(
+        child=serializers.CharField(), required=False
+    )
+    color_themes = serializers.ListField(
+        child=serializers.CharField(), required=False, allow_null=True
+    )
+    user_prompt = serializers.CharField(required=False, allow_blank=True)
+    location = serializers.CharField()

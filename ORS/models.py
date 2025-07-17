@@ -169,3 +169,45 @@ class EssentialItem(models.Model):
 
     def __str__(self):
         return self.name
+
+
+from django.contrib.auth import get_user_model
+
+User = get_user_model()
+
+class OutfitRecommendation(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+
+    # User's input
+    occasion = models.CharField(max_length=100)
+    preferred_styles = ArrayField(  
+        models.CharField(max_length=100),
+        default=list,
+        blank=True
+    )
+    color_themes = ArrayField( 
+        models.CharField(max_length=50),
+        default=list,
+        blank=True,
+        null=True
+    )
+    user_prompt = models.TextField(blank=True, null=True)
+
+    location = models.CharField(max_length=100)
+    weather_condition = models.CharField(max_length=50)  # e.g., "hot", "rainy"
+
+    # Step A: Conceptual AI Recommendation
+    conceptual_gen_ai_prompt_sent = models.TextField()
+    conceptual_gen_ai_description = models.TextField()
+
+    # Step B: Refined with user's clothes
+    refined_gen_ai_prompt_sent = models.TextField()
+    gen_ai_description = models.TextField()
+
+    # Final selected items from wardrobe
+    selected_items = models.ManyToManyField('WardrobeItem')
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Outfit for {self.user.username} - {self.occasion} - {self.created_at.date()}"

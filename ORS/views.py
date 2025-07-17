@@ -5,11 +5,11 @@ from rest_framework.response import Response
 from django.contrib.auth.hashers import check_password
 from django.core.mail import send_mail
 from django.shortcuts import render, redirect
-from .utils import generate_otp
+from .utils import generate_otp ,filter_wardrobe_items
 from .serializers import SignupSerializer, LoginSerializer
 from django.shortcuts import get_object_or_404
-from .models import Preference, User , EssentialItem , WardrobeItem
-from .serializers import PreferenceSerializer , EssentialItemSerializer, WardrobeItemSerializer
+from .models import Preference, User , EssentialItem , WardrobeItem, OutfitRecommendation
+from .serializers import PreferenceSerializer , EssentialItemSerializer, WardrobeItemSerializer,OutfitRequestSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
 import google.generativeai as genai
 
@@ -187,3 +187,36 @@ class AddWardrobeItemView(APIView):
             serializer.save(user=request.user)
             return Response({"message": "Wardrobe item added!", "item": serializer.data}, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+class OutfitRecommendationView(APIView):
+    def post(self, request):
+        serializer = OutfitRequestSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=400)
+
+        data = serializer.validated_data
+        user = request.user
+
+         # Step 1: Fetch weather condition (mocking for now)
+        weather_condition = "hot"
+
+        #Step 2: creating an outfitrecommendation object (saving initial info)
+        recommendation = OutfitRecommendation.objects.create(
+            user=user,
+            occasion=data["occasion"],
+            preferred_styles=data.get("preferred_styles", []),
+            color_themes=data.get("color_themes", []),
+            user_prompt=data.get("user_prompt", ""),
+            location=data["location"],
+            weather_condition=weather_condition,
+            conceptual_gen_ai_prompt_sent="",
+            conceptual_gen_ai_description="",
+            refined_gen_ai_prompt_sent="",
+            gen_ai_description=""
+        )
+
+        return Response({
+            "message": "Outfit request received.",
+            "recommendation_id": recommendation.id,
+            "weather_condition": weather_condition
+        }, status=201)
