@@ -187,6 +187,11 @@ class AddWardrobeItemView(APIView):
             serializer.save(user=request.user)
             return Response({"message": "Wardrobe item added!", "item": serializer.data}, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    def get(self, request):
+        wardrobe_items = WardrobeItem.objects.filter(user=request.user)
+        serializer = WardrobeItemSerializer(wardrobe_items, many=True)
+        return Response({"items": serializer.data}, status=status.HTTP_200_OK)
+    
     
 class OutfitRecommendationView(APIView):
     def post(self, request):
@@ -199,6 +204,17 @@ class OutfitRecommendationView(APIView):
 
          # Step 1: Fetch weather condition (mocking for now)
         weather_condition = "hot"
+
+        filtered_items = filter_wardrobe_items(
+            user=user,
+            preferred_styles=data.get('preferred_styles'),
+            occasion=data.get('occasion'),
+            weather_condition=weather_condition,
+        )
+
+        print(f"Filtered items count: {len(filtered_items)}")
+        for item in filtered_items:
+            print(f"Item: {item.name} - {item.category} - {item.color}")
 
         #Step 2: creating an outfitrecommendation object (saving initial info)
         recommendation = OutfitRecommendation.objects.create(
@@ -215,8 +231,56 @@ class OutfitRecommendationView(APIView):
             gen_ai_description=""
         )
 
+        # Step 3: Generate a prompt from filtered items
+        if filtered_items:
+            item_descriptions = []
+            for item in filtered_items:
+                desc = f"- {item.name}"
+                if item.category:
+                    desc += f" (Category: {item.category})"
+                if item.color:
+                    desc += f" (Color: {item.color})"
+                if item.material:
+                    desc += f" (Material: {item.material})"
+                if item.style_tags:
+                    desc += f" (Style: {', '.join(item.style_tags)})"
+                item_descriptions.append(desc)
+            
+            wardrobe_summary = "\n".join(item_descriptions)
+        else:
+            wardrobe_summary = "No suitable items found in wardrobe for the given preferences."
+
+        # Fix 4: Improved prompt structure
+        prompt = (
+            f"You are a fashion stylist. Create an outfit recommendation based on the following:\n\n"
+            f"OCCASION: {data['occasion']}\n"
+            f"PREFERRED STYLES: {', '.join(data.get('preferred_styles', ['Any']))}\n"
+            f"COLOR THEMES: {', '.join(data.get('color_themes', ['Any']))}\n"
+            f"LOCATION: {data['location']}\n"
+            f"WEATHER: {weather_condition}\n"
+            f"USER NOTES: {data.get('user_prompt', 'None')}\n\n"
+            f"AVAILABLE CLOTHING ITEMS:\n{wardrobe_summary}\n\n"
+            f"Please provide:\n"
+            f"1. A complete outfit recommendation using the available items\n"
+            f"2. Explanation of why this outfit works for the occasion and weather\n"
+            f"3. Styling tips\n\n"
+            f"If no suitable items are available, suggest what items would be needed."
+        )
+        try:
+            response = model.generate_content(prompt)               #using gena ai model defined at the top
+            gen_description = response.text
+        except Exception as e:
+            return Response({"error": f"Gemini failed: {str(e)}"}, status=500)
+        
+ 
+        recommendation.conceptual_gen_ai_prompt_sent = prompt                       #saving the prompt and response in teh recommendation object
+        recommendation.conceptual_gen_ai_description = gen_description
+        recommendation.save()                             #saving the object in DB
+
+
         return Response({
             "message": "Outfit request received.",
             "recommendation_id": recommendation.id,
-            "weather_condition": weather_condition
+            "weather_condition": weather_condition,
+            "gemini_summary": gen_description
         }, status=201)
