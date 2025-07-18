@@ -54,6 +54,7 @@ class Signup_SendOTPView(APIView):
 class Signup_VerifyOTP(APIView):
 
     def post(self, request):
+        
         """Step 2: Verify OTP and create user"""
         user_otp = request.data.get('otp')
         session_otp = request.session.get('otp')
@@ -66,7 +67,7 @@ class Signup_VerifyOTP(APIView):
             return Response({"error": "Invalid OTP"}, status=status.HTTP_400_BAD_REQUEST)
 
         # OTP verified → create user using stored signup data
-        serializer = Signup_SendOTPView(data=signup_data)
+        serializer = SignupSerializer(data=signup_data)
         if serializer.is_valid():
             serializer.save()
             request.session.flush()  # Clear OTP and signup data
@@ -95,10 +96,7 @@ class LoginView(APIView):
                 "message": "Login Successful",
                 "username": user.email,
                 "user_id": user.user_id,
-                "token": {
-                    "access": access_token,
-                    "refresh": str(refresh)
-                }
+        
             }, status=status.HTTP_202_ACCEPTED)
 
             response['Authorization'] = f'Bearer {access_token}'
@@ -231,6 +229,35 @@ class OutfitRecommendationView(APIView):
             gen_ai_description=""
         )
 
+
+        prompt1 = (
+        f"You are a fashion stylist. The user is looking for a conceptual idea of an outfit that suits the following context.\n\n"
+        f"Crucially, this is only for inspiration — the outfit should not reference or depend on the user's actual clothes.\n"
+        f"Instead, suggest a general outfit idea that matches the provided preferences:\n\n"
+        f"OCCASION: {data['occasion']}\n"
+        f"PREFERRED STYLES: {', '.join(data.get('preferred_styles', ['Any']))}\n"
+        f"COLOR THEMES: {', '.join(data.get('color_themes', ['Any']))}\n"
+        f"LOCATION: {data['location']}\n"
+        f"WEATHER: {weather_condition}\n"
+        f"USER NOTES: {data.get('user_prompt', 'None')}\n\n"
+        f"Please provide:\n"
+        f"1. A general outfit idea (e.g., top, bottom, footwear, accessories)\n"
+        f"2. A short explanation of why this works for the occasion and weather\n"
+        f"3. Optional styling tips to enhance the look\n\n"
+        f"Do NOT use specific brand names or assume what the user owns. Keep it conceptual and adaptable.")
+
+        try:
+            response1 = model.generate_content(prompt1)               #using gena ai model defined at the top
+            gen_description1 = response1.text
+        except Exception as e:
+            return Response({"error": f"Gemini failed: {str(e)}"}, status=500)
+
+        recommendation.conceptual_gen_ai_prompt_sent = prompt1                       #saving the prompt and response in teh recommendation object
+        recommendation.conceptual_gen_ai_description = gen_description1
+
+        
+
+
         # Step 3: Generate a prompt from filtered items
         if filtered_items:
             item_descriptions = []
@@ -250,37 +277,34 @@ class OutfitRecommendationView(APIView):
         else:
             wardrobe_summary = "No suitable items found in wardrobe for the given preferences."
 
-        # Fix 4: Improved prompt structure
-        prompt = (
-            f"You are a fashion stylist. Create an outfit recommendation based on the following:\n\n"
-            f"OCCASION: {data['occasion']}\n"
-            f"PREFERRED STYLES: {', '.join(data.get('preferred_styles', ['Any']))}\n"
-            f"COLOR THEMES: {', '.join(data.get('color_themes', ['Any']))}\n"
-            f"LOCATION: {data['location']}\n"
-            f"WEATHER: {weather_condition}\n"
-            f"USER NOTES: {data.get('user_prompt', 'None')}\n\n"
-            f"AVAILABLE CLOTHING ITEMS:\n{wardrobe_summary}\n\n"
+        # Step 4: Ask AI to build outfit using actual wardrobe
+        prompt2 = (
+            f"You are a personal stylist. The user already received a conceptual outfit idea:\n\n"
+            f"\"{recommendation.conceptual_gen_ai_description}\"\n\n"
+            f"Now, based on the user's actual wardrobe items below, suggest a complete outfit using only these items.\n\n"
+            f"USER'S WARDROBE:\n{wardrobe_summary}\n\n"
             f"Please provide:\n"
-            f"1. A complete outfit recommendation using the available items\n"
-            f"2. Explanation of why this outfit works for the occasion and weather\n"
-            f"3. Styling tips\n\n"
-            f"If no suitable items are available, suggest what items would be needed."
+            f"1. A complete outfit recommendation using only the provided items (include item names and categories)\n"
+            f"2. Explanation of how this outfit aligns with the original idea\n"
+            f"3. Any smart substitutions or styling adjustments made\n\n"
+            f"If no close match is possible, suggest what items the user might consider adding."
         )
         try:
-            response = model.generate_content(prompt)               #using gena ai model defined at the top
-            gen_description = response.text
+            response2 = model.generate_content(prompt2)               #using gena ai model defined at the top
+            gen_description2 = response2.text
         except Exception as e:
             return Response({"error": f"Gemini failed: {str(e)}"}, status=500)
         
  
-        recommendation.conceptual_gen_ai_prompt_sent = prompt                       #saving the prompt and response in teh recommendation object
-        recommendation.conceptual_gen_ai_description = gen_description
+        recommendation.refined_gen_ai_prompt_sent = prompt2                      #saving the prompt and response in teh recommendation object
+        recommendation.gen_ai_description= gen_description2
         recommendation.save()                             #saving the object in DB
 
 
         return Response({
-            "message": "Outfit request received.",
-            "recommendation_id": recommendation.id,
-            "weather_condition": weather_condition,
-            "gemini_summary": gen_description
-        }, status=201)
+        "message": "Outfit request received.",
+        "recommendation_id": recommendation.id,
+        "weather_condition": weather_condition,
+        "conceptual_outfit": recommendation.conceptual_gen_ai_description,
+        "final_outfit_recommendation": recommendation.gen_ai_description
+    }, status=201)
