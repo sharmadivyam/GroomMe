@@ -1,5 +1,27 @@
 from .models import WardrobeItem
 import random
+import requests
+
+def fetch_outfit_images(query, api_key, cse_id, num=4):
+    url = "https://www.googleapis.com/customsearch/v1"
+    params = {
+        "key": api_key,
+        "cx": cse_id,
+        "q": query,
+        "searchType": "image",
+        "num": num,
+        "safe": "active"
+    }
+
+    response = requests.get(url, params=params)
+    data = response.json()
+
+    image_urls = []
+    for item in data.get("items", []):
+        image_urls.append(item["link"])
+
+    return image_urls
+
 
 def generate_otp():
     return str(random.randint(100000, 999999))

@@ -5,15 +5,20 @@ from rest_framework.response import Response
 from django.contrib.auth.hashers import check_password
 from django.core.mail import send_mail
 from django.shortcuts import render, redirect
-from .utils import generate_otp ,filter_wardrobe_items
+from .utils import generate_otp ,filter_wardrobe_items 
 from .serializers import SignupSerializer, LoginSerializer
 from django.shortcuts import get_object_or_404
 from .models import Preference, User , EssentialItem , WardrobeItem, OutfitRecommendation
 from .serializers import PreferenceSerializer , EssentialItemSerializer, WardrobeItemSerializer,OutfitRequestSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
 import google.generativeai as genai
+from django.conf import settings
 
-genai.configure(api_key='AIzaSyBgJb17Jz6PMIxLk08Qlg49M9jRi6q5eBA')
+api_key = settings.GOOGLE_API_KEY
+cse_id = settings.GOOGLE_CSE_ID
+gen_ai_key = settings.GEMINI_API_KEY
+
+genai.configure(api_key=gen_ai_key)
 model = genai.GenerativeModel(model_name ='models/gemini-1.5-flash')
 
 class GeminiSuggestOutfit(APIView):
@@ -287,6 +292,7 @@ class OutfitRecommendationView(APIView):
             f"1. A complete outfit recommendation using only the provided items (include item names and categories)\n"
             f"2. Explanation of how this outfit aligns with the original idea\n"
             f"3. Any smart substitutions or styling adjustments made\n\n"
+            f"4. a short image prompt to search for images of outfit \n\n"
             f"If no close match is possible, suggest what items the user might consider adding."
         )
         try:
@@ -294,7 +300,7 @@ class OutfitRecommendationView(APIView):
             gen_description2 = response2.text
         except Exception as e:
             return Response({"error": f"Gemini failed: {str(e)}"}, status=500)
-        
+                
  
         recommendation.refined_gen_ai_prompt_sent = prompt2                      #saving the prompt and response in teh recommendation object
         recommendation.gen_ai_description= gen_description2
