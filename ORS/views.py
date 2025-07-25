@@ -8,15 +8,28 @@ from django.shortcuts import render, redirect
 from .utils import generate_otp ,filter_wardrobe_items 
 from .serializers import SignupSerializer, LoginSerializer
 from django.shortcuts import get_object_or_404
-from .models import Preference, User , EssentialItem , WardrobeItem, OutfitRecommendation
+from .models import Preference, User , EssentialItem , WardrobeItem, OutfitRecommendation, GeneratedOutfitImage
 from .serializers import PreferenceSerializer , EssentialItemSerializer, WardrobeItemSerializer,OutfitRequestSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
 import google.generativeai as genai
 from django.conf import settings
+import json
+from supabase import create_client
+from PIL import Image
+import uuid
+from io import BytesIO
+import base64
 
 api_key = settings.GOOGLE_API_KEY
 cse_id = settings.GOOGLE_CSE_ID
 gen_ai_key = settings.GEMINI_API_KEY
+gemini_pro_key = settings.GEMINI_PRO_API_KEY
+supabase_key = settings.SUPABASE_KEY
+supabase_url = settings.SUPABASE_URL
+
+BUCKET_NAME = "outfit-image"
+
+supabase = create_client(supabase_url,supabase_key)
 
 genai.configure(api_key=gen_ai_key)
 model = genai.GenerativeModel(model_name ='models/gemini-1.5-flash')
@@ -282,35 +295,135 @@ class OutfitRecommendationView(APIView):
         else:
             wardrobe_summary = "No suitable items found in wardrobe for the given preferences."
 
-        # Step 4: Ask AI to build outfit using actual wardrobe
+                # Step 4: Ask AI to build outfit using actual wardrobe
         prompt2 = (
             f"You are a personal stylist. The user already received a conceptual outfit idea:\n\n"
             f"\"{recommendation.conceptual_gen_ai_description}\"\n\n"
             f"Now, based on the user's actual wardrobe items below, suggest a complete outfit using only these items.\n\n"
             f"USER'S WARDROBE:\n{wardrobe_summary}\n\n"
-            f"Please provide:\n"
-            f"1. A complete outfit recommendation using only the provided items (include item names and categories)\n"
-            f"2. Explanation of how this outfit aligns with the original idea\n"
-            f"3. Any smart substitutions or styling adjustments made\n\n"
-            f"4. a short image prompt to search for images of outfit \n\n"
-            f"If no close match is possible, suggest what items the user might consider adding."
+            f"Provide your response strictly in the following JSON format:\n\n"
+            f"""{{
+            "final_outfit": {{
+                "top": "<name and category of top>",
+                "bottom": "<name and category of bottom>",
+                "footwear": "<name and category of footwear>",
+                "accessories": ["<accessory1>", "<accessory2>"]
+            }},
+            "alignment_explanation": "<Why this outfit matches the original concept and weather>",
+            "styling_adjustments": "<Any smart substitutions or styling tips>",
+            "image_prompt": "<short visual prompt describing the outfit simply>"
+            }}"""
+            f"\n\nRules:\n"
+            f"- Use only the provided wardrobe items.\n"
+            f"- Make sure the response is valid JSON.\n"
+            f"- Do not add extra commentary or markdown formatting like ```json.\n"
+            f"- The 'image_prompt' should use short visual descriptions like: 'white shirt, blue jeans, sneakers'."
         )
+
         try:
-            response2 = model.generate_content(prompt2)               #using gena ai model defined at the top
-            gen_description2 = response2.text
+            response2 = model.generate_content(prompt2)
+            gen_description2 = response2.text.strip()
         except Exception as e:
             return Response({"error": f"Gemini failed: {str(e)}"}, status=500)
-                
- 
-        recommendation.refined_gen_ai_prompt_sent = prompt2                      #saving the prompt and response in teh recommendation object
-        recommendation.gen_ai_description= gen_description2
-        recommendation.save()                             #saving the object in DB
 
+        # Safely parse JSON, even if wrapped in markdown
+        import re
+        import json
+
+        def extract_json(text):
+            match = re.search(r"{.*}", text, re.DOTALL)
+            if match:
+                try:
+                    return json.loads(match.group(0))
+                except json.JSONDecodeError:
+                    return None
+            return None
+
+        parsed_data = extract_json(gen_description2)
+
+        if not parsed_data:
+            return Response({"error": "Gemini returned invalid JSON."}, status=500)
+
+        image_prompt = parsed_data.get("image_prompt", "")
+
+        # Save prompt and response
+        recommendation.refined_gen_ai_prompt_sent = prompt2
+        recommendation.gen_ai_description = gen_description2
+
+        genai.configure(api_key=gemini_pro_key)
+        promodel = genai.GenerativeModel(model_name ="models/gemini-2.0-flash-preview-image-generation")
+        generated_image_url = None
+        try:
+            print(f"Attempting to generate image with Gemini 2.0 Flash Preview using prompt: {image_prompt}")
+
+            # Use the image_gen_model and specify response_modalities
+            image_response = promodel.generate_content(
+            contents=[image_prompt],
+            generation_config=genai.types.GenerationConfig(
+                # Use response_mime_type for explicit image generation
+                response_mime_type="image/jpeg", # Or "image/png"
+                # You might not need response_modalities=["TEXT", "IMAGE"] here if image_mime_type is set
+                # unless you expect both text and image output for this specific model.
+                # For pure image generation, response_mime_type is usually sufficient.
+            )
+        )
+
+            # Process the response to find image parts
+            image_bytes = None
+            for part in image_response.candidates[0].content.parts:
+                if hasattr(part, 'inline_data') and part.inline_data:
+                    # Found an image part
+                    image_data = part.inline_data.data # This is base64 encoded image data
+                    image_mime_type = part.inline_data.mime_type
+                    
+                    # Decode base64 and create a BytesIO object
+                    image_bytes = BytesIO(base64.b64decode(image_data))
+                    image_bytes.seek(0)
+                    print(f"Successfully received image data of type: {image_mime_type}")
+                    break # Assuming we only need one image
+
+            if image_bytes:
+                # Step 1: Upload to Supabase
+                filename = f"outfit_{uuid.uuid4()}.png" # Using .png as a default
+                # You might want to extract the actual extension from image_mime_type
+                # e.g., if image_mime_type is "image/jpeg", then use ".jpeg"
+
+                supabase.storage.from_(BUCKET_NAME).upload(
+                    path=filename,
+                    file=image_bytes,
+                    file_options={"content-type": image_mime_type}, # Use the detected mime type
+                    upsert=True
+                )
+
+                # Step 2: Build public URL for Supabase
+                generated_image_url = f"{supabase_url}/storage/v1/object/public/{BUCKET_NAME}/{filename}"
+                print(f"Image uploaded to Supabase: {generated_image_url}")
+
+                # Step 3: Save to GeneratedOutfitImage model
+                outfit_image_obj = GeneratedOutfitImage.objects.create(
+                    outfit=recommendation,
+                    image_url=generated_image_url,
+                    prompt_used=image_prompt,
+                )
+
+                # Step 4: Link to OutfitRecommendation
+                recommendation.outfit_image = outfit_image_obj
+                recommendation.save()
+            else:
+                print("No image data found in Gemini 2.0 Flash Preview response.")
+
+        except Exception as e:
+            print("❌ Image generation or upload failed:", e)
+            # You might want to log this error more formally
+            pass # Continue to save text recommendation even if image generation fails
+
+        recommendation.save() # Ensure the recommendation is saved
 
         return Response({
-        "message": "Outfit request received.",
-        "recommendation_id": recommendation.id,
-        "weather_condition": weather_condition,
-        "conceptual_outfit": recommendation.conceptual_gen_ai_description,
-        "final_outfit_recommendation": recommendation.gen_ai_description
-    }, status=201)
+            "message": "Outfit request received.",
+            "recommendation_id": recommendation.id,
+            "weather_condition": weather_condition,
+            "conceptual_outfit": recommendation.conceptual_gen_ai_description,
+            "final_outfit_recommendation": recommendation.gen_ai_description,
+            "generated_image_url": generated_image_url # Send the generated image URL to the frontend
+        }, status=201)

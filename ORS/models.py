@@ -171,6 +171,7 @@ class EssentialItem(models.Model):
         return self.name
 
 
+
 from django.contrib.auth import get_user_model
 
 User = get_user_model()
@@ -207,7 +208,26 @@ class OutfitRecommendation(models.Model):
     # Final selected items from wardrobe
     selected_items = models.ManyToManyField('WardrobeItem')
 
+    final_outfit = models.JSONField(null=True, blank=True)
+    outfit_image = models.ForeignKey(
+        'GeneratedOutfitImage',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='used_in_recommendation'
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
         return f"Outfit for {self.user.username} - {self.occasion} - {self.created_at.date()}"
+
+
+class GeneratedOutfitImage(models.Model):
+    outfit = models.ForeignKey(OutfitRecommendation, on_delete=models.CASCADE, related_name='generated_images')
+    image_url = models.URLField()
+    prompt_used = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Image for {self.outfit.user.username} - {self.outfit.occasion} - {self.created_at.strftime('%Y-%m-%d %H:%M')}"
